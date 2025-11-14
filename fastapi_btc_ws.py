@@ -152,6 +152,6 @@ async def index():
     return HTMLResponse(html)
 
 # --- run as script ---
-if __name__ == "__main__":
+#if __name__ == "__main__":
     # install dependencies: pip install fastapi uvicorn
-    uvicorn.run("fastapi_btc_ws:app", host="0.0.0.0", port=8000, reload=False)
+    #uvicorn.run("fastapi_btc_ws:app", host="0.0.0.0", port=8000, reload=False)
