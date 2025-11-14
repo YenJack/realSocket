@@ -1,30 +1,21 @@
-# fastapi_btc_ws.py
-# Simple FastAPI WebSocket service that simulates live Bitcoin price updates
-# - Serves a small test HTML page at GET /
-# - REST endpoint GET /price returns current price
-# - WebSocket endpoint /ws pushes JSON messages to all connected clients
-# Run: pip install fastapi uvicorn
-#      python fastapi_btc_ws.py
-
 import asyncio
 import json
 import random
 import time
 from datetime import datetime
-from typing import Dict, List
+from typing import List
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
-import uvicorn
 
 app = FastAPI()
 
 # --- Configuration ---
-UPDATE_INTERVAL_SECONDS = 1.0  # how often the server updates price and broadcasts
-START_PRICE = 60000.0  # starting simulated BTC price
-VOLATILITY = 0.0015  # typical fractional move per tick (adjust for bigger/smaller swings)
+UPDATE_INTERVAL_SECONDS = 1.0
+START_PRICE = 60000.0
+VOLATILITY = 0.0015
 
-# --- runtime state ---
+# --- Connection Manager ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -40,13 +31,10 @@ class ConnectionManager:
             pass
 
     async def broadcast(self, message: str):
-        # copy list to avoid mutation during iteration
-        conns = list(self.active_connections)
-        for connection in conns:
+        for connection in list(self.active_connections):
             try:
                 await connection.send_text(message)
             except Exception:
-                # if sending fails, drop connection
                 try:
                     await connection.close()
                 except Exception:
@@ -58,18 +46,15 @@ manager = ConnectionManager()
 current_price = START_PRICE
 last_update_ts = time.time()
 
-# --- price simulation background task ---
+# --- Background price simulator ---
 async def price_simulator():
     global current_price, last_update_ts
     while True:
-        # simple geometric random walk step
-        drift = 0.0
         shock = random.gauss(0, 1)
-        fraction_move = drift * UPDATE_INTERVAL_SECONDS + VOLATILITY * shock * (UPDATE_INTERVAL_SECONDS ** 0.5)
+        fraction_move = VOLATILITY * shock * (UPDATE_INTERVAL_SECONDS ** 0.5)
         current_price = max(0.01, current_price * (1 + fraction_move))
         last_update_ts = time.time()
 
-        # prepare message
         payload = {
             "symbol": "BTC",
             "currency": "USD",
@@ -78,13 +63,9 @@ async def price_simulator():
             "iso": datetime.utcfromtimestamp(last_update_ts).isoformat() + "Z"
         }
         message = json.dumps(payload)
-
-        # broadcast to websockets
         await manager.broadcast(message)
-
         await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
 
-# start background task on app startup
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(price_simulator())
@@ -94,6 +75,7 @@ async def startup_event():
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
+        # send initial snapshot
         await websocket.send_text(json.dumps({
             "type": "snapshot",
             "symbol": "BTC",
@@ -104,22 +86,17 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
             except asyncio.TimeoutError:
-                # send a ping to keep alive
                 await websocket.send_text(json.dumps({"type": "ping"}))
                 continue
 
             if data.lower().strip() == "ping":
                 await websocket.send_text(json.dumps({"type": "pong", "timestamp": int(time.time())}))
-            else:
-                # ignore unknown messages
-                pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception:
         manager.disconnect(websocket)
 
-
-# --- REST endpoints ---
+# --- REST endpoint ---
 @app.get("/price")
 async def get_price():
     return JSONResponse({
@@ -130,6 +107,7 @@ async def get_price():
         "iso": datetime.utcfromtimestamp(last_update_ts).isoformat() + "Z"
     })
 
+# --- HTML test page ---
 @app.get("/")
 async def index():
     html = """
@@ -162,8 +140,3 @@ async def index():
 </html>
 """
     return HTMLResponse(html)
-
-# --- run as script ---
-#if __name__ == "__main__":
-    # install dependencies: pip install fastapi uvicorn
-    #uvicorn.run("fastapi_btc_ws:app", host="0.0.0.0", port=8000, reload=False)
