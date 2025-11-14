@@ -94,7 +94,6 @@ async def startup_event():
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # optionally send initial price snapshot
         await websocket.send_text(json.dumps({
             "type": "snapshot",
             "symbol": "BTC",
@@ -102,15 +101,23 @@ async def websocket_endpoint(websocket: WebSocket):
             "timestamp": int(last_update_ts)
         }))
         while True:
-            # keep connection alive; accept pings from client
-            data = await websocket.receive_text()
-            # we expect simple "ping" messages from clients; reply with pong
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                # send a ping to keep alive
+                await websocket.send_text(json.dumps({"type": "ping"}))
+                continue
+
             if data.lower().strip() == "ping":
                 await websocket.send_text(json.dumps({"type": "pong", "timestamp": int(time.time())}))
+            else:
+                # ignore unknown messages
+                pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception:
         manager.disconnect(websocket)
+
 
 # --- REST endpoints ---
 @app.get("/price")
@@ -141,7 +148,8 @@ async def index():
       const log = (m)=>{ const p=document.getElementById('log'); p.textContent = m + "\n" + p.textContent };
       const status = document.getElementById('status');
       const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-      ws.onopen = ()=>{ status.textContent = 'connected'; ws.send('hello-from-browser'); };
+      #ws.onopen = ()=>{ status.textContent = 'connected'; ws.send('hello-from-browser'); };
+      ws.onopen = ()=>{ status.textContent = 'connected'; };
       ws.onmessage = (ev)=>{ log(ev.data); };
       ws.onclose = ()=>{ status.textContent = 'closed'; };
       ws.onerror = (e)=>{ status.textContent = 'error'; console.error(e); };
