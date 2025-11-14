@@ -147,7 +147,7 @@ async def index():
     <script>
       const log = (m)=>{ const p=document.getElementById('log'); p.textContent = m + "\n" + p.textContent };
       const status = document.getElementById('status');
-      const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+      const ws = new WebSocket('wss://' + location.host + '/ws');
       ws.onopen = ()=>{ status.textContent = 'connected'; };
       ws.onmessage = (ev)=>{ log(ev.data); };
       ws.onclose = ()=>{ status.textContent = 'closed'; };
