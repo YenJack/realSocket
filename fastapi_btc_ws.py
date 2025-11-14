@@ -132,7 +132,6 @@ async def get_price():
 
 @app.get("/")
 async def index():
-    # Simple HTML page to test websocket in browser
     html = """
 <!doctype html>
 <html>
@@ -144,14 +143,20 @@ async def index():
     <h1>Simulated BTC Price WebSocket</h1>
     <div id="status">connecting...</div>
     <pre id="log" style="height:400px;overflow:auto;border:1px solid #ccc;padding:8px"></pre>
+
     <script>
-      const log = (m)=>{ const p=document.getElementById('log'); p.textContent = m + "\n" + p.textContent };
+      const log = (m) => {
+        const p = document.getElementById('log');
+        p.textContent = m + "\\n" + p.textContent;
+      };
       const status = document.getElementById('status');
+
       const ws = new WebSocket('wss://' + location.host + '/ws');
-      ws.onopen = ()=>{ status.textContent = 'connected'; };
-      ws.onmessage = (ev)=>{ log(ev.data); };
-      ws.onclose = ()=>{ status.textContent = 'closed'; };
-      ws.onerror = (e)=>{ status.textContent = 'error'; console.error(e); };
+
+      ws.onopen = () => { status.textContent = 'connected'; };
+      ws.onmessage = (ev) => { log(ev.data); };
+      ws.onclose = () => { status.textContent = 'closed'; };
+      ws.onerror = (e) => { status.textContent = 'error'; console.error(e); };
     </script>
   </body>
 </html>
